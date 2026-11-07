@@ -149,20 +149,38 @@ jobs:
       - name: Setup MSVC x86 environment
         shell: pwsh
         run: |
-          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
-                -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
           if (-not $vs) { throw "未找到 Visual Studio" }
           Write-Host "VS: $vs"
 
-          # 用 vcvars32 把 x86 工具链环境导出给后续步骤
-          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars32.bat`" && set" | ForEach-Object {
-            if ($_ -match '^([^=]+)=(.*)$') {
-              "$($Matches[1])=$($Matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # 用 vcvars32 导出 x86 工具链环境到 GITHUB_ENV，供后续步骤继承
+          $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars32.bat"
+          if (-not (Test-Path $vcvars)) { throw "找不到 vcvars32.bat" }
+
+          $lines = cmd /c "`"$vcvars`" >nul 2>&1 && set"
+          $envFile = $env:GITHUB_ENV
+
+          foreach ($line in $lines) {
+            if ($line -match '^([^=]+)=(.*)$') {
+              $name  = $Matches[1]
+              $value = $Matches[2]
+              # GITHUB_ENV 格式：NAME=VALUE 或 NAME<<EOF ... EOF（多行）
+              if ($value -match "`n") {
+                "$name<<__EOF__"  | Out-File -FilePath $envFile -Append -Encoding utf8 -NoNewline
+                "`n$value`n__EOF__" | Out-File -FilePath $envFile -Append -Encoding utf8
+              } else {
+                "$name=$value" | Out-File -FilePath $envFile -Append -Encoding utf8
+              }
             }
           }
 
-          # 确认 cl 是 32 位目标
-          where.exe cl
+          # 校验工具链确实是 x86
+          if (-not $env:VSCMD_ARG_TGT_ARCH) {
+            $arch = ($lines | Where-Object { $_ -match '^VSCMD_ARG_TGT_ARCH=' }) -replace '^VSCMD_ARG_TGT_ARCH=',''
+            Write-Host "VSCMD_ARG_TGT_ARCH=$arch"
+            if ($arch -ne 'x86') { throw "工具链不是 x86：$arch" }
+          }
 
       - name: Configure CMake (x86)
         shell: pwsh
