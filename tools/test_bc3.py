@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
 """验证 BC3 编码器：编码 -> 用 Pillow(独立解码器) 回读 -> 比较误差"""
+
+# ---- CI（英文 Windows 控制台为 cp1252）强制 UTF-8 输出，须早于任何 print ----
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
 import numpy as np
 from PIL import Image
 import sys, os
