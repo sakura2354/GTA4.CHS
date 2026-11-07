@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
 """终验：确认假名/ASCII/3500常用字真的在图集与字表中，且槽位可正确索引"""
+
+# ---- CI（英文 Windows 控制台为 cp1252）强制 UTF-8 输出，须早于任何 print ----
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
 import json, struct, sys
 from pathlib import Path
 import numpy as np
