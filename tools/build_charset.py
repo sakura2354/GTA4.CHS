@@ -15,6 +15,16 @@ char_table.dat v2 格式（向后兼容 v1 的 count+codepoints 前段）：
     uint32  cols                (每行字符数)
     uint32  rows                (总行数)
 """
+
+# ---- CI（英文 Windows 控制台为 cp1252）强制 UTF-8 输出，须早于任何 print ----
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
 import struct
 from pathlib import Path
 
