@@ -9,6 +9,5 @@
     "fmt",
     "zlib"
   ],
-  "builtin-baseline": "6fdd23fa0a9479a9f9a1c48178696f60cf39255d",
-  "overrides": []
+  "builtin-baseline": "6fdd23fa0a9479a9f9a1c48178696f60cf39255d"
 }
