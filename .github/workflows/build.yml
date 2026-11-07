@@ -17,6 +17,9 @@ env:
   VCLTL_VERSION: v5.3.1
   # vcpkg 使用 baseline（锁版本，保证可复现）
   VCPKG_DEFAULT_TRIPLET: x86-windows-static
+  # Windows runner 控制台默认 cp1252，强制 Python 以 UTF-8 输出（脚本含中文日志）
+  PYTHONUTF8: '1'
+  PYTHONIOENCODING: utf-8
 
 jobs:
   # -------------------------------------------------------------------------
