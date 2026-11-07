@@ -17,6 +17,16 @@ RSC5 flags（GetVirtualSize/GetPhysicalSize 的逆）：
     size = ((flags >> 15) & 0x7FF) << (((flags >> 26) & 0xF) + 8)   # physical
   其中 block4Count 权重为 16 个基础页，故 4096 = 16 个 256B 页 -> (flags&0x7FF)=16, vexp=0
 """
+
+# ---- CI（英文 Windows 控制台为 cp1252）强制 UTF-8 输出，须早于任何 print ----
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
 import struct, zlib, sys
 from pathlib import Path
 
