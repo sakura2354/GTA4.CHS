@@ -1,4 +1,4 @@
-﻿#include "plugin.h"
+#include "plugin.h"
 #include "font.h"
 #include "game.h"
 #include "char_table.h"
@@ -69,7 +69,20 @@ bool CPlugin::Init(HMODULE module)
 
     batch_matcher.run_callbacks();
 
+    // 字表必须在补丁生效后立即加载：字体 Hook 已经生效，
+    // 若字表为空，任何一个非 0x20 字符都会落到 fallback，导致满屏'？'。
     char_table.LoadTable(GetPluginAsset("char_table.dat"));
+
+    if (char_table.GetChars().empty())
+    {
+        spdlog::critical("char_table.dat 未加载，汉化不可用（请确认 GTA4.CHS\\char_table.dat 存在且为增强版）");
+        return false;
+    }
+
+    spdlog::info("字库就绪：{} 字，图集 {} 列 x {} 行，格式 v{}",
+        char_table.GetChars().size(), char_table.GetColumns(), char_table.GetRows(),
+        char_table.IsV2() ? 2 : 1);
+
     whm_table.LoadTable(GetPluginAsset("whm_table.dat"));
     string_table.LoadTable(GetPluginAsset("custom_translations.json"));
 
