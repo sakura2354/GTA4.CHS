@@ -1,0 +1,218 @@
+name: Build
+
+on:
+  push:
+    branches: [master, eflc112]
+    paths-ignore:
+      - '**/*.md'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+
+env:
+  # VC-LTL5 二进制包（提供 config/、TargetPlatform/、_msvcrt.h）
+  VCLTL_VERSION: v5.3.1
+  # vcpkg 使用 baseline（锁版本，保证可复现）
+  VCPKG_DEFAULT_TRIPLET: x86-windows-static
+
+jobs:
+  # -------------------------------------------------------------------------
+  # 资源生成链：字表 / 图集 / DXT5 / WTD
+  # 产物在 Windows runner 上生成（Pillow + numpy），与本地流程一致
+  # -------------------------------------------------------------------------
+  assets:
+    name: Generate font assets
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pillow numpy
+
+      - name: Fetch General Standard Chinese Characters (3500 level-1)
+        shell: pwsh
+        run: |
+          # 若仓库已附带 characters.csv 则跳过下载
+          $csv = Join-Path $env:GITHUB_WORKSPACE "characters.csv"
+          if (-not (Test-Path $csv)) {
+            $url = "https://raw.githubusercontent.com/jaywcjlove/table-of-general-standard-chinese-characters/main/data/characters.csv"
+            Invoke-WebRequest -Uri $url -OutFile $csv -TimeoutSec 120
+          }
+          $lines = (Get-Content $csv -Encoding UTF8).Count
+          Write-Host "characters.csv lines = $lines"
+          if ($lines -lt 4000) { throw "characters.csv 异常，行数=$lines" }
+
+      - name: Build charset
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: |
+          # final_charset.txt 已随仓库附带；缺失时由 collect_all_chars.py 从译文重建
+          python tools/build_charset.py
+
+      - name: Render atlas (8192x8192)
+        working-directory: ${{ github.workspace }}
+        run: python tools/render_atlas.py
+
+      - name: Build char_table.dat (v2)
+        working-directory: ${{ github.workspace }}
+        run: python tools/build_char_table.py
+
+      - name: Compress to BC3 and pack fonts_chs.wtd
+        working-directory: ${{ github.workspace }}
+        run: python tools/build_wtd.py
+
+      - name: Verify WTD container
+        working-directory: ${{ github.workspace }}
+        run: python tools/verify_wtd.py
+
+      - name: Verify charset coverage
+        working-directory: ${{ github.workspace }}
+        run: python tools/final_check.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: font-assets
+          path: |
+            assets/char_table.dat
+            assets/fonts_chs.wtd
+            assets/charset.txt
+            assets/atlas_ranges.json
+          if-no-files-found: error
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # 编译插件：x86 (32-bit) + 静态 CRT + VC-LTL
+  # GTA4 是 32 位进程，必须 x86-windows-static
+  # -------------------------------------------------------------------------
+  build:
+    name: Build plugin (x86)
+    runs-on: windows-latest
+    needs: assets
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------- VC-LTL ----------
+      - name: Download VC-LTL5
+        shell: pwsh
+        run: |
+          $api = "https://api.github.com/repos/Chuyu-Team/VC-LTL5/releases/tags/$env:VCLTL_VERSION"
+          $rel = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'ci' } -TimeoutSec 60
+          $asset = $rel.assets | Where-Object { $_.name -eq 'VC-LTL-Binary.7z' }
+          if (-not $asset) { throw "找不到 VC-LTL-Binary.7z" }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile vcltl.7z -TimeoutSec 300
+          Write-Host "downloaded $((Get-Item vcltl.7z).Length) bytes"
+
+      - name: Extract VC-LTL5
+        shell: pwsh
+        run: |
+          # runner 自带 7z
+          & "$env:ProgramFiles\7-Zip\7z.exe" x vcltl.7z -o"$env:GITHUB_WORKSPACE\VC-LTL" -y | Out-Null
+          if (-not (Test-Path "$env:GITHUB_WORKSPACE\VC-LTL\_msvcrt.h")) { throw "VC-LTL 解压失败" }
+          Get-ChildItem "$env:GITHUB_WORKSPACE\VC-LTL" | Select-Object Name
+
+      # ---------- vcpkg ----------
+      - name: Setup vcpkg (manifest, binary cache)
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          echo "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg" >> $env:GITHUB_ENV
+
+      - name: vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/vcpkg/installed
+            ${{ runner.temp }}/vcpkg/packages
+            ${{ github.workspace }}/vcpkg_installed
+          key: vcpkg-${{ runner.os }}-x86-${{ hashFiles('vcpkg.json') }}
+
+      - name: vcpkg install
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_ROOT\vcpkg.exe" install `
+            --triplet x86-windows-static `
+            --x-manifest-root="$env:GITHUB_WORKSPACE" `
+            --x-install-root="$env:GITHUB_WORKSPACE\vcpkg_installed" `
+            --clean-after-build
+
+      # ---------- configure & build ----------
+      - name: Setup MSVC x86 environment
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+                -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw "未找到 Visual Studio" }
+          Write-Host "VS: $vs"
+
+          # 用 vcvars32 把 x86 工具链环境导出给后续步骤
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars32.bat`" && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') {
+              "$($Matches[1])=$($Matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            }
+          }
+
+          # 确认 cl 是 32 位目标
+          where.exe cl
+
+      - name: Configure CMake (x86)
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -G "Ninja Multi-Config" `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=cl `
+            -DCMAKE_CXX_STANDARD=20 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x86-windows-static `
+            -DVCPKG_MANIFEST_INSTALL=OFF `
+            -DVCPKG_INSTALLED_DIR="$env:GITHUB_WORKSPACE\vcpkg_installed"
+
+      - name: Build (Release)
+        run: cmake --build build --config Release --parallel
+
+      # ---------- 打包 ----------
+      - name: Download generated assets
+        uses: actions/download-artifact@v4
+        with:
+          name: font-assets
+          path: assets
+
+      - name: Assemble release folder
+        shell: pwsh
+        run: |
+          $out = "$env:GITHUB_WORKSPACE\release\plugins\GTA4.CHS"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+          $asi = Get-ChildItem -Path build -Recurse -Filter "GTA4.CHS.asi" | Select-Object -First 1
+          if (-not $asi) { throw "未找到 GTA4.CHS.asi" }
+          Copy-Item $asi.FullName $out
+
+          Copy-Item assets\char_table.dat $out
+          Copy-Item assets\fonts_chs.wtd  $out
+
+          Write-Host "--- release tree ---"
+          Get-ChildItem $out | Select-Object Name,Length
+
+          # 校验 asi 是 32 位 PE
+          $bytes = [System.IO.File]::ReadAllBytes($asi.FullName)
+          $peOff = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [BitConverter]::ToUInt16($bytes, $peOff + 4)
+          Write-Host ("machine=0x{0:X4} (0x014C=x86)" -f $machine)
+          if ($machine -ne 0x014C) { throw "构建产物不是 x86" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GTA4.CHS-asi
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
