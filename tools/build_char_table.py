@@ -13,6 +13,16 @@
 advances 用于「ASCII 移除豁免」后仍保留比例宽度：拉丁字母按自身宽度排版，
 CJK 与全角标点固定 32px。
 """
+
+# ---- CI（英文 Windows 控制台为 cp1252）强制 UTF-8 输出，须早于任何 print ----
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
 import json
 from pathlib import Path
 import struct
