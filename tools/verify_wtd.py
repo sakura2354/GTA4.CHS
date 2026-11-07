@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
 """验证 fonts_chs.wtd：RSC5 头、pgDictionary 结构、纹理描述、BC3 回读比对源图"""
+
+# ---- CI（英文 Windows 控制台为 cp1252）强制 UTF-8 输出，须早于任何 print ----
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
 import struct, zlib, sys
 from pathlib import Path
 import numpy as np
