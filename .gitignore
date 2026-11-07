@@ -1,7 +1,29 @@
+# --- 构建 ---
 build/
-.cache/
+out/
+.vs/
 .vscode/
+.cache/
 .xmake/
 CMakeUserPresets.json
-.vs/
-out/
+vcpkg_installed/
+vcpkg_installed/
+
+# --- VC-LTL（CI 下载，不入库）---
+VC-LTL/
+vcltl.7z
+
+# --- 资源生成产物（CI 重新生成；仓库只保留源码与输入）---
+assets/*.png
+assets/*.wtd
+assets/*.dat
+assets/atlas_ranges.json
+assets/charset.txt
+fonts_chs_atlas.png
+
+# --- 译文原始数据（体积大，由 workflow 按需拉取）---
+translations/
+
+# --- 其他 ---
+*.user
+*.log
