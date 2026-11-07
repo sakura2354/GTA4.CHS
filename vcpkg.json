@@ -1,1 +1,14 @@
-{}
+{
+  "name": "gta4-chs",
+  "version-string": "1.0.0-enhanced",
+  "description": "GTA4 完整版汉化补丁（增强版：3500常用字+假名，移除 ASCII 字形豁免）",
+  "dependencies": [
+    "nlohmann-json",
+    "utfcpp",
+    "spdlog",
+    "fmt",
+    "zlib"
+  ],
+  "builtin-baseline": "6fdd23fa0a9479a9f9a1c48178696f60cf39255d",
+  "overrides": []
+}
