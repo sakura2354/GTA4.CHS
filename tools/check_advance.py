@@ -2,6 +2,16 @@
 """校验 advance 缩放系数：字符在图集中按 64px 格绘制，但屏幕上目标宽度 =
    汉字 32px（fChsWidth），故缩放 = advance/64 * (64/2) = advance/2 用于屏幕宽度系数。"""
 
+# ---- CI（英文 Windows 控制台为 cp1252）强制 UTF-8 输出，须早于任何 print ----
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
+
 # 字体渲染时，汉字在 64px 格内以 size=58 渲染，其 advance = 58
 # 屏幕目标：汉字占 32px（fChsWidth），即 58 -> 32 的映射
 # 所以「单位 advance（0..64）-> 屏幕宽」的比例应为 32/64 = 0.5
