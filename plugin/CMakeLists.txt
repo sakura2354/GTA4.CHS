@@ -39,7 +39,8 @@ target_compile_definitions(plugin PRIVATE NOMINMAX _CRT_SECURE_NO_WARNINGS)
 
 target_precompile_headers(plugin PRIVATE "${CMAKE_SOURCE_DIR}/common/stdinc.h")
 
-target_link_libraries(plugin PRIVATE utf8::cpp utf8cpp::utf8cpp spdlog::spdlog_header_only)
+# utf8cpp 端口导出目标为 utf8cpp::utf8cpp（旧版 utf8::cpp 是 cmake-modules 遗留，vcpkg 无此目标）
+target_link_libraries(plugin PRIVATE utf8cpp::utf8cpp spdlog::spdlog_header_only)
 target_link_libraries(plugin PRIVATE nlohmann_json::nlohmann_json)
 
 set_target_properties(plugin PROPERTIES OUTPUT_NAME "GTA4.CHS")
